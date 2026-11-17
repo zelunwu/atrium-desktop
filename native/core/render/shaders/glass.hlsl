@@ -272,4 +272,13 @@ float4 PSImpl(VSOut i, bool basic)
 }
 
 float4 PS(VSOut i) : SV_Target { return PSImpl(i, false); }
-float4 PSBasic(VSOut i) : SV_Target { return PSImpl(i, true); }
+float4 PSBasic(VSOut i) : SV_Target
+{
+    // Keep the original arithmetic near the rim. The specialized distance
+    // path can round a sampled channel by one 8-bit level at the boundary.
+    float2 px = i.uv * Size;
+    float boundary = min(min(px.x - Shape.x, Shape.z - px.x), min(px.y - Shape.y, Shape.w - px.y));
+    if (boundary <= max(Edge, 2))
+        return PSImpl(i, false);
+    return PSImpl(i, true);
+}
