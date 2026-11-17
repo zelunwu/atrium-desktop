@@ -191,14 +191,26 @@ float3 blurred(float2 px)
     return c;
 }
 
+float3 sharpBackdrop(float2 px, float2 off)
+{
+    float3 sharp;
+    sharp.r = bg(px + off * (1 + Dispersion), 0).r;
+    sharp.g = bg(px + off, 0).g;
+    sharp.b = bg(px + off * (1 - Dispersion), 0).b;
+    return sharp;
+}
+
 float4 PSImpl(VSOut i, bool basic)
 {
     float2 px = i.uv * Size;
     float d = Dist(px, basic);
 
     // Soft drop shadow outside the shape.
-    float ds = Dist(px - float2(0, Inset * 0.25), basic);
-    float shadowA = Shadow * exp(-max(ds, 0) / max(Inset * 0.35, 1)) * step(0, d);
+    float shadowA = 0;
+    if (d >= 0) {
+        float ds = Dist(px - float2(0, Inset * 0.25), basic);
+        shadowA = Shadow * exp(-max(ds, 0) / max(Inset * 0.35, 1));
+    }
 
     // The implicit edge distance is exact only near the outline: where a corner
     // meets a straight side, deep inside, it jumps by hundreds of px between
@@ -237,12 +249,13 @@ float4 PSImpl(VSOut i, bool basic)
         off -= dv * 0.06 * Ripple.w * saturate(1 - dl / max(Ripple.z, 1)); // the dent inside the ring
     }
 
-    float3 sharp;
-    sharp.r = bg(px + off * (1 + Dispersion), 0).r;
-    sharp.g = bg(px + off, 0).g;
-    sharp.b = bg(px + off * (1 - Dispersion), 0).b;
-    float3 soft = blurred(px + off);
-    float3 col = lerp(sharp, soft, BlurMix);
+    float3 col;
+    if (BlurMix <= 0)
+        col = sharpBackdrop(px, off);
+    else if (BlurMix >= 1)
+        col = blurred(px + off);
+    else
+        col = lerp(sharpBackdrop(px, off), blurred(px + off), BlurMix);
 
     // Vibrancy: content under the glass reads a little richer and brighter,
     // as on macOS, before the tint is mixed in.
